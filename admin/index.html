@@ -154,7 +154,7 @@
       <div class="mt-8 bg-gray-900 rounded-2xl p-6 border border-gray-800">
         <h2 class="text-lg font-semibold mb-3">📋 CDN URL Pattern</h2>
         <div class="bg-gray-800 rounded-lg p-4 font-mono text-sm text-blue-300 break-all">
-          https://<span id="pages-domain">iliad-interactive-group.github.io/IliadPublicCDN</span>/<span class="text-green-300">{folder}</span>/<span class="text-yellow-300">{filename}</span>
+          https://<span id="pages-domain"></span>/<span class="text-green-300">{folder}</span>/<span class="text-yellow-300">{filename}</span>
         </div>
         <p class="text-xs text-gray-500 mt-2">Files are available at this URL pattern once uploaded and deployed.</p>
       </div>
@@ -173,7 +173,7 @@
     const OWNER = 'Iliad-Interactive-Group'
     const REPO = 'IliadPublicCDN'
     const BRANCH = 'main'
-    const PAGES_BASE = `https://iliad-interactive-group.github.io/IliadPublicCDN`
+    const PAGES_BASE = `https://${OWNER.toLowerCase()}.github.io/${REPO}`
     const API = 'https://api.github.com'
 
     let token = ''
@@ -240,6 +240,7 @@
       document.getElementById('auth-gate').classList.add('hidden')
       document.getElementById('admin-ui').classList.remove('hidden')
       document.getElementById('user-badge').textContent = `@${username}`
+      document.getElementById('pages-domain').textContent = `${OWNER.toLowerCase()}.github.io/${REPO}`
       loadFolder('images')
     }
 
@@ -542,7 +543,7 @@
       navigator.clipboard.writeText(text).then(() => {
         showToast('✅', 'URL copied to clipboard!')
       }).catch(() => {
-        // Fallback
+        // Legacy fallback for older browsers without Clipboard API
         const ta = document.createElement('textarea')
         ta.value = text
         document.body.appendChild(ta)
@@ -562,8 +563,6 @@
     }
 
     // ─── Drag & Drop ─────────────────────────────────────────────────
-    const dropZone = document.getElementById('drop-zone')
-
     document.addEventListener('DOMContentLoaded', () => {
       const dz = document.getElementById('drop-zone')
       if (!dz) return
