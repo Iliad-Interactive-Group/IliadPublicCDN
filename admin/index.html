@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iliad CDN — Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+  <div id="app" class="max-w-5xl mx-auto px-4 py-8">
+
+    <!-- Auth Gate -->
+    <div id="auth-gate" class="max-w-md mx-auto mt-24">
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold mb-2">⚙️ CDN Admin</h1>
+        <p class="text-gray-400">Authenticate with GitHub to manage files</p>
+      </div>
+      <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+        <label class="block text-sm font-medium text-gray-300 mb-2">GitHub Personal Access Token</label>
+        <input
+          id="token-input"
+          type="password"
+          placeholder="ghp_xxxxxxxxxxxx"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+        <p class="text-xs text-gray-500 mt-2">
+          Needs <code class="bg-gray-800 px-1 rounded">repo</code> scope or fine-grained <code class="bg-gray-800 px-1 rounded">contents: write</code> permission.
+          <br>Token is stored only in your browser — never sent anywhere except GitHub's API.
+        </p>
+        <button
+          id="auth-btn"
+          onclick="authenticate()"
+          class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors"
+        >
+          Connect
+        </button>
+        <p id="auth-error" class="text-red-400 text-sm mt-2 hidden"></p>
+      </div>
+    </div>
+
+    <!-- Main Admin UI (hidden until authed) -->
+    <div id="admin-ui" class="hidden">
+      <header class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="text-2xl font-bold">⚙️ CDN Admin</h1>
+          <p class="text-gray-400 text-sm mt-1">Upload and manage public CDN assets</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="user-badge" class="text-sm text-gray-400"></span>
+          <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-400 transition-colors">Sign out</button>
+        </div>
+      </header>
+
+      <!-- Upload Section -->
+      <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800 mb-8">
+        <h2 class="text-lg font-semibold mb-4">Upload Files</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Target Folder</label>
+            <select
+              id="folder-select"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="images">📸 images</option>
+              <option value="logos">🏷️ logos</option>
+              <option value="files">📄 files</option>
+              <option value="fonts">🔤 fonts</option>
+              <option value="videos">🎬 videos</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Select Files</label>
+            <div
+              id="drop-zone"
+              class="border-2 border-dashed border-gray-700 rounded-lg px-4 py-6 text-center hover:border-blue-500 transition-colors cursor-pointer"
+              onclick="document.getElementById('file-input').click()"
+            >
+              <input id="file-input" type="file" multiple class="hidden" onchange="handleFiles(this.files)">
+              <p class="text-gray-400 text-sm">
+                <span class="text-blue-400 font-medium">Click to browse</span> or drag &amp; drop files here
+              </p>
+              <p class="text-gray-600 text-xs mt-1">Images, JSON, SVG, fonts, and more</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Staged files -->
+        <div id="staged-files" class="hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-medium text-gray-300">Staged for upload</h3>
+            <button onclick="clearStaged()" class="text-xs text-gray-500 hover:text-red-400">Clear all</button>
+          </div>
+          <div id="staged-list" class="space-y-2 mb-4"></div>
+          <button
+            id="upload-btn"
+            onclick="uploadAll()"
+            class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-colors"
+          >
+            Upload All
+          </button>
+        </div>
+
+        <!-- Upload progress -->
+        <div id="upload-progress" class="hidden mt-4">
+          <div class="w-full bg-gray-800 rounded-full h-2">
+            <div id="progress-bar" class="bg-blue-500 h-2 rounded-full transition-all" style="width: 0%"></div>
+          </div>
+          <p id="progress-text" class="text-xs text-gray-400 mt-2"></p>
+        </div>
+
+        <!-- Upload results -->
+        <div id="upload-results" class="hidden mt-4">
+          <h3 class="text-sm font-medium text-green-400 mb-3">✅ Upload Complete</h3>
+          <div id="results-list" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <!-- Existing Files Browser -->
+      <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">Browse Files</h2>
+          <div class="flex items-center gap-2">
+            <select
+              id="browse-folder"
+              onchange="loadFolder(this.value)"
+              class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="images">📸 images</option>
+              <option value="logos">🏷️ logos</option>
+              <option value="files">📄 files</option>
+              <option value="fonts">🔤 fonts</option>
+              <option value="videos">🎬 videos</option>
+            </select>
+            <button onclick="loadFolder(document.getElementById('browse-folder').value)" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg px-3 py-2 text-sm transition-colors">
+              🔄
+            </button>
+          </div>
+        </div>
+
+        <div id="files-loading" class="hidden text-center py-8">
+          <div class="inline-block animate-spin text-2xl">⏳</div>
+          <p class="text-gray-400 text-sm mt-2">Loading files…</p>
+        </div>
+
+        <div id="files-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+        <div id="files-empty" class="hidden text-center py-8 text-gray-500">
+          <p class="text-3xl mb-2">📭</p>
+          <p>No files in this folder yet</p>
+        </div>
+      </div>
+
+      <!-- CDN Info -->
+      <div class="mt-8 bg-gray-900 rounded-2xl p-6 border border-gray-800">
+        <h2 class="text-lg font-semibold mb-3">📋 CDN URL Pattern</h2>
+        <div class="bg-gray-800 rounded-lg p-4 font-mono text-sm text-blue-300 break-all">
+          https://<span id="pages-domain">iliad-interactive-group.github.io/IliadPublicCDN</span>/<span class="text-green-300">{folder}</span>/<span class="text-yellow-300">{filename}</span>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Files are available at this URL pattern once uploaded and deployed.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="fixed bottom-6 right-6 hidden">
+    <div class="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3">
+      <span id="toast-icon"></span>
+      <span id="toast-text" class="text-sm"></span>
+    </div>
+  </div>
+
+  <script>
+    const OWNER = 'Iliad-Interactive-Group'
+    const REPO = 'IliadPublicCDN'
+    const BRANCH = 'main'
+    const PAGES_BASE = `https://iliad-interactive-group.github.io/IliadPublicCDN`
+    const API = 'https://api.github.com'
+
+    let token = ''
+    let stagedFiles = []
+
+    // ─── Auth ────────────────────────────────────────────────────────
+    function initAuth() {
+      const saved = localStorage.getItem('iliad_cdn_token')
+      if (saved) {
+        token = saved
+        verifyToken()
+      }
+    }
+
+    async function authenticate() {
+      const input = document.getElementById('token-input')
+      const errorEl = document.getElementById('auth-error')
+      const btn = document.getElementById('auth-btn')
+
+      token = input.value.trim()
+      if (!token) {
+        showError(errorEl, 'Please enter a token')
+        return
+      }
+
+      btn.textContent = 'Connecting…'
+      btn.disabled = true
+
+      try {
+        const res = await ghFetch('/user')
+        if (!res.ok) throw new Error('Invalid token')
+        const user = await res.json()
+        localStorage.setItem('iliad_cdn_token', token)
+        showAdmin(user.login)
+      } catch {
+        showError(errorEl, 'Authentication failed — check your token and try again')
+        token = ''
+      } finally {
+        btn.textContent = 'Connect'
+        btn.disabled = false
+      }
+    }
+
+    async function verifyToken() {
+      try {
+        const res = await ghFetch('/user')
+        if (!res.ok) throw new Error()
+        const user = await res.json()
+        showAdmin(user.login)
+      } catch {
+        localStorage.removeItem('iliad_cdn_token')
+        token = ''
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('iliad_cdn_token')
+      token = ''
+      document.getElementById('auth-gate').classList.remove('hidden')
+      document.getElementById('admin-ui').classList.add('hidden')
+    }
+
+    function showAdmin(username) {
+      document.getElementById('auth-gate').classList.add('hidden')
+      document.getElementById('admin-ui').classList.remove('hidden')
+      document.getElementById('user-badge').textContent = `@${username}`
+      loadFolder('images')
+    }
+
+    function showError(el, msg) {
+      el.textContent = msg
+      el.classList.remove('hidden')
+      setTimeout(() => el.classList.add('hidden'), 5000)
+    }
+
+    // ─── GitHub API ──────────────────────────────────────────────────
+    function ghFetch(path, options = {}) {
+      return fetch(`${API}${path}`, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(options.headers || {}),
+        },
+      })
+    }
+
+    // ─── File Staging ────────────────────────────────────────────────
+    function handleFiles(fileList) {
+      for (const file of fileList) {
+        if (stagedFiles.some(f => f.name === file.name)) continue
+        stagedFiles.push(file)
+      }
+      renderStaged()
+    }
+
+    function removeStaged(index) {
+      stagedFiles.splice(index, 1)
+      renderStaged()
+    }
+
+    function clearStaged() {
+      stagedFiles = []
+      renderStaged()
+    }
+
+    function renderStaged() {
+      const container = document.getElementById('staged-files')
+      const list = document.getElementById('staged-list')
+
+      if (stagedFiles.length === 0) {
+        container.classList.add('hidden')
+        return
+      }
+
+      container.classList.remove('hidden')
+      list.innerHTML = stagedFiles.map((f, i) => {
+        const isImg = /\.(png|jpe?g|gif|svg|webp|ico|bmp|avif)$/i.test(f.name)
+        return `
+          <div class="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2">
+            <span class="text-lg">${isImg ? '🖼️' : '📄'}</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium truncate">${escapeHtml(f.name)}</p>
+              <p class="text-xs text-gray-500">${formatSize(f.size)}</p>
+            </div>
+            <button onclick="removeStaged(${i})" class="text-gray-500 hover:text-red-400 text-sm">✕</button>
+          </div>
+        `
+      }).join('')
+    }
+
+    // ─── Upload ──────────────────────────────────────────────────────
+    async function uploadAll() {
+      if (stagedFiles.length === 0) return
+
+      const folder = document.getElementById('folder-select').value
+      const progressDiv = document.getElementById('upload-progress')
+      const progressBar = document.getElementById('progress-bar')
+      const progressText = document.getElementById('progress-text')
+      const resultsDiv = document.getElementById('upload-results')
+      const resultsList = document.getElementById('results-list')
+      const uploadBtn = document.getElementById('upload-btn')
+
+      progressDiv.classList.remove('hidden')
+      resultsDiv.classList.add('hidden')
+      uploadBtn.disabled = true
+      uploadBtn.textContent = 'Uploading…'
+
+      const results = []
+      const total = stagedFiles.length
+
+      for (let i = 0; i < total; i++) {
+        const file = stagedFiles[i]
+        const pct = Math.round(((i) / total) * 100)
+        progressBar.style.width = `${pct}%`
+        progressText.textContent = `Uploading ${i + 1}/${total}: ${file.name}…`
+
+        try {
+          const base64 = await fileToBase64(file)
+          const path = `${folder}/${file.name}`
+
+          const res = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${path}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `Add ${path} via CDN Admin`,
+              content: base64,
+              branch: BRANCH,
+            }),
+          })
+
+          if (res.status === 422) {
+            // File may already exist — try to get its SHA first
+            const existingRes = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${path}?ref=${BRANCH}`)
+            if (existingRes.ok) {
+              const existing = await existingRes.json()
+              const updateRes = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${path}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  message: `Update ${path} via CDN Admin`,
+                  content: base64,
+                  sha: existing.sha,
+                  branch: BRANCH,
+                }),
+              })
+              if (!updateRes.ok) throw new Error(`HTTP ${updateRes.status}`)
+            } else {
+              throw new Error('File exists but cannot be updated')
+            }
+          } else if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`)
+          }
+
+          const cdnUrl = `${PAGES_BASE}/${path}`
+          results.push({ name: file.name, url: cdnUrl, success: true })
+        } catch (err) {
+          results.push({ name: file.name, error: err.message, success: false })
+        }
+      }
+
+      progressBar.style.width = '100%'
+      progressText.textContent = 'Done!'
+
+      // Show results
+      resultsDiv.classList.remove('hidden')
+      resultsList.innerHTML = results.map(r => {
+        if (r.success) {
+          return `
+            <div class="bg-gray-800 rounded-lg px-4 py-3">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-sm font-medium text-green-400 truncate">✅ ${escapeHtml(r.name)}</p>
+                <button onclick="copyToClipboard('${r.url}')" class="shrink-0 text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded transition-colors">
+                  📋 Copy URL
+                </button>
+              </div>
+              <p class="text-xs text-blue-300 mt-1 font-mono break-all">${escapeHtml(r.url)}</p>
+            </div>
+          `
+        } else {
+          return `
+            <div class="bg-gray-800 rounded-lg px-4 py-3">
+              <p class="text-sm font-medium text-red-400">❌ ${escapeHtml(r.name)}</p>
+              <p class="text-xs text-gray-500 mt-1">${escapeHtml(r.error)}</p>
+            </div>
+          `
+        }
+      }).join('')
+
+      // Reset
+      stagedFiles = []
+      renderStaged()
+      uploadBtn.disabled = false
+      uploadBtn.textContent = 'Upload All'
+
+      // Refresh the file browser
+      setTimeout(() => {
+        document.getElementById('browse-folder').value = folder
+        loadFolder(folder)
+      }, 1000)
+    }
+
+    // ─── Browse Files ────────────────────────────────────────────────
+    async function loadFolder(folder) {
+      const grid = document.getElementById('files-grid')
+      const loading = document.getElementById('files-loading')
+      const empty = document.getElementById('files-empty')
+
+      grid.innerHTML = ''
+      empty.classList.add('hidden')
+      loading.classList.remove('hidden')
+
+      try {
+        const res = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${folder}?ref=${BRANCH}`)
+        if (!res.ok) throw new Error()
+        const items = await res.json()
+
+        const files = items.filter(i => i.type === 'file' && i.name !== '.gitkeep')
+
+        loading.classList.add('hidden')
+
+        if (files.length === 0) {
+          empty.classList.remove('hidden')
+          return
+        }
+
+        grid.innerHTML = files.map(f => {
+          const cdnUrl = `${PAGES_BASE}/${folder}/${f.name}`
+          const isImg = /\.(png|jpe?g|gif|svg|webp|ico|bmp|avif)$/i.test(f.name)
+          const isJson = /\.json$/i.test(f.name)
+          const preview = isImg
+            ? `<img src="${cdnUrl}" alt="${escapeHtml(f.name)}" class="max-h-full max-w-full object-contain" loading="lazy">`
+            : `<span class="text-3xl">${isJson ? '📋' : '📄'}</span>`
+
+          return `
+            <div class="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden group">
+              <div class="aspect-video bg-gray-850 flex items-center justify-center p-3 bg-gray-800/50">
+                ${preview}
+              </div>
+              <div class="p-3 border-t border-gray-700">
+                <p class="text-sm font-medium truncate mb-1" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</p>
+                <p class="text-xs text-gray-500 mb-2">${formatSize(f.size)}</p>
+                <div class="flex gap-2">
+                  <button
+                    onclick="copyToClipboard('${cdnUrl}')"
+                    class="flex-1 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    📋 Copy URL
+                  </button>
+                  <a
+                    href="${cdnUrl}"
+                    target="_blank"
+                    class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    ↗
+                  </a>
+                  <button
+                    onclick="deleteFile('${folder}', '${f.name}', '${f.sha}')"
+                    class="text-xs bg-red-600/20 text-red-400 hover:bg-red-600/30 px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    🗑
+                  </button>
+                </div>
+              </div>
+            </div>
+          `
+        }).join('')
+      } catch {
+        loading.classList.add('hidden')
+        empty.classList.remove('hidden')
+      }
+    }
+
+    // ─── Delete ──────────────────────────────────────────────────────
+    async function deleteFile(folder, name, sha) {
+      if (!confirm(`Delete ${folder}/${name}?`)) return
+
+      try {
+        const res = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${folder}/${name}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: `Delete ${folder}/${name} via CDN Admin`,
+            sha: sha,
+            branch: BRANCH,
+          }),
+        })
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+        showToast('🗑️', `Deleted ${name}`)
+        loadFolder(folder)
+      } catch (err) {
+        showToast('❌', `Failed to delete: ${err.message}`)
+      }
+    }
+
+    // ─── Utilities ───────────────────────────────────────────────────
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result
+          const base64 = result.split(',')[1]
+          resolve(base64)
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return `${bytes} B`
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    }
+
+    function escapeHtml(str) {
+      const el = document.createElement('span')
+      el.textContent = str
+      return el.innerHTML
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('✅', 'URL copied to clipboard!')
+      }).catch(() => {
+        // Fallback
+        const ta = document.createElement('textarea')
+        ta.value = text
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+        showToast('✅', 'URL copied!')
+      })
+    }
+
+    function showToast(icon, text) {
+      const toast = document.getElementById('toast')
+      document.getElementById('toast-icon').textContent = icon
+      document.getElementById('toast-text').textContent = text
+      toast.classList.remove('hidden')
+      setTimeout(() => toast.classList.add('hidden'), 3000)
+    }
+
+    // ─── Drag & Drop ─────────────────────────────────────────────────
+    const dropZone = document.getElementById('drop-zone')
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const dz = document.getElementById('drop-zone')
+      if (!dz) return
+
+      dz.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        dz.classList.add('border-blue-500', 'bg-blue-500/5')
+      })
+
+      dz.addEventListener('dragleave', () => {
+        dz.classList.remove('border-blue-500', 'bg-blue-500/5')
+      })
+
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault()
+        dz.classList.remove('border-blue-500', 'bg-blue-500/5')
+        if (e.dataTransfer.files.length) {
+          handleFiles(e.dataTransfer.files)
+        }
+      })
+    })
+
+    // ─── Init ────────────────────────────────────────────────────────
+    initAuth()
+  </script>
+</body>
+</html>

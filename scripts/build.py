@@ -91,6 +91,13 @@ def build_landing_page(categories: dict[str, list[str]]) -> str:
 {cards}
     </section>
 
+    <section class="text-center">
+      <a href="admin/" class="inline-flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-xl transition-colors text-sm font-medium">
+        ⚙️ Open Admin Panel
+      </a>
+      <p class="text-gray-400 text-xs mt-2">Upload &amp; manage files with a GitHub token</p>
+    </section>
+
     <footer class="text-center text-gray-400 text-sm border-t border-gray-200 pt-6">
       <p>Iliad Development Group &mdash; Be Heard. Be Found.</p>
       <p class="mt-1">
@@ -218,6 +225,12 @@ def main() -> None:
     (SITE_DIR / "index.html").write_text(
         build_landing_page(categories), encoding="utf-8"
     )
+
+    # Copy the admin interface
+    admin_src = REPO_ROOT / "admin"
+    if admin_src.is_dir():
+        admin_dest = SITE_DIR / "admin"
+        shutil.copytree(admin_src, admin_dest)
 
     # Copy any root-level static files (like CNAME for custom domain)
     cname = REPO_ROOT / "CNAME"
