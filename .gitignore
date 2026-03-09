@@ -86,3 +86,16 @@ dist/
 build/
 .next/
 out/
+# Build output
+_site/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
